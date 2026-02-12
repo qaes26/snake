@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>السلم والثعبان - كلاسيك 2D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Tajawal:wght@500;700;900&display=swap');
+        
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background: radial-gradient(circle at center, #3e2723 0%, #1b0000 100%);
+            color: #fff;
+            overflow: hidden;
+            touch-action: manipulation;
+            margin: 0;
+            height: 100vh;
+        }
+
+        /* حاوية الرقعة الخشبية 2D */
+        #board-wrapper {
+            background: linear-gradient(135deg, #5c4033, #3e2723);
+            padding: 12px;
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.8), inset 0 0 10px rgba(0,0,0,0.5);
+            position: relative;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto;
+            border: 2px solid #271612;
+        }
+
+        #board-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background-color: #fdf5e6; /* لون ورق عتيق */
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.1);
+            border: 2px solid #271612;
+        }
+
+        /* شبكة اللعب */
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0;
+        }
+
+        .cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Aref Ruqaa', serif;
+            font-size: clamp(14px, 4vw, 20px);
+            font-weight: bold;
+            color: #4e342e;
+            border: 1px solid rgba(92, 64, 51, 0.15);
+            user-select: none;
+        }
+
+        .cell-alt { background-color: rgba(92, 64, 51, 0.08); }
+
+        #canvas-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* قطع اللاعبين 2D (شكل أحجار كلاسيكية) */
+        .player-piece {
+            position: absolute;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            border: 2px solid rgba(255,255,255,0.8);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.6), inset 0 -3px 6px rgba(0,0,0,0.4), inset 0 3px 6px rgba(255,255,255,0.4);
+            transition: left 0.3s ease-in-out, top 0.3s ease-in-out;
+        }
+
+        .piece-jumping {
+            animation: jump2d 0.3s ease-in-out alternate 2;
+        }
+
+        @keyframes jump2d {
+            0% { transform: translateY(0) scale(1); }
+            100% { transform: translateY(-15px) scale(1.15); }
+        }
+
+        /* اسم اللاعب فوق القطعة */
+        .player-name-label {
+            position: absolute;
+            top: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(27, 0, 0, 0.85);
+            color: #fdf5e6;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            white-space: nowrap;
+            font-weight: bold;
+            border: 1px solid #d4af37;
+            pointer-events: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.6);
+            font-family: 'Tajawal', sans-serif;
+            z-index: 30;
+        }
+
+        /* النرد 3D الكلاسيكي العاجي (نحافظ عليه لأنه جميل) */
+        .dice-scene {
+            width: 60px; height: 60px;
+            perspective: 400px;
+            margin: 0 auto;
+            cursor: pointer;
+        }
+        .cube {
+            width: 100%; height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transform: translateZ(-30px);
+            transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .cube.rolling { animation: spinCube 0.5s infinite linear; }
+        
+        @keyframes spinCube {
+            0% { transform: translateZ(-30px) rotateX(0deg) rotateY(0deg); }
+            100% { transform: translateZ(-30px) rotateX(360deg) rotateY(360deg); }
+        }
+
+        .cube__face {
+            position: absolute;
+            width: 60px; height: 60px;
+            background: #fffff0; /* لون العاج */
+            border: 1px solid #dcdcdc;
+            border-radius: 8px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .cube__face--front  { transform: rotateY(  0deg) translateZ(30px); }
+        .cube__face--right  { transform: rotateY( 90deg) translateZ(30px); }
+        .cube__face--back   { transform: rotateY(180deg) translateZ(30px); }
+        .cube__face--left   { transform: rotateY(-90deg) translateZ(30px); }
+        .cube__face--top    { transform: rotateX( 90deg) translateZ(30px); }
+        .cube__face--bottom { transform: rotateX(-90deg) translateZ(30px); }
+
+        .dot-3d {
+            width: 12px; height: 12px;
+            background: #111;
+            border-radius: 50%;
+            position: absolute;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+        }
+        .dot-red { background: #c0392b; }
+
+        /* الأزرار الكلاسيكية */
+        .btn-classic {
+            background: linear-gradient(to bottom, #d4af37, #aa801b);
+            color: #1b0000;
+            text-shadow: 1px 1px 0 rgba(255,255,255,0.4);
+            border: 2px solid #f9e596;
+            box-shadow: 0 6px 0 #7e5e10, 0 10px 15px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+        }
+        .btn-classic:active {
+            transform: translateY(6px);
+            box-shadow: 0 0px 0 #7e5e10, 0 4px 5px rgba(0,0,0,0.5);
+        }
+
+        .hidden-screen { display: none !important; }
+        
+        #history-log::-webkit-scrollbar { width: 4px; }
+        #history-log::-webkit-scrollbar-thumb { background: rgba(212, 175, 55, 0.5); border-radius: 10px; }
+
+        .signature {
+            font-family: 'Aref Ruqaa', serif;
+            font-size: 1.1rem;
+            color: #d4af37;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            letter-spacing: 1px;
+        }
+        
+        .panel-wood {
+            background: linear-gradient(135deg, #4e342e, #2e1a14);
+            border: 3px solid #795548;
+            border-radius: 16px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center">
+
+    <!-- شاشة البداية -->
+    <div id="start-screen" class="w-full h-full flex flex-col items-center justify-center p-6 z-50">
+        <div class="panel-wood p-8 flex flex-col items-center max-w-sm w-full animate-fade-in-up">
+            
+            <div class="w-24 h-24 rounded-full border-4 border-[#d4af37] bg-black/40 flex items-center justify-center mb-6 shadow-[0_0_20px_#d4af37]">
+                <i class="fas fa-dice text-5xl text-[#d4af37]"></i>
+            </div>
+            
+            <h1 class="text-4xl font-black mb-8 text-center text-[#d4af37] drop-shadow-lg" style="font-family: 'Aref Ruqaa', serif;">
+                السلم والثعبان<br><span class="text-xl text-white/80">كلاسيك</span>
+            </h1>
+            
+            <!-- إدخال اسم اللاعب -->
+            <input type="text" id="player-name-input" placeholder="أدخل اسمك هنا..." maxlength="12" class="w-full bg-black/30 border-2 border-[#d4af37] text-white placeholder-white/50 rounded-xl px-4 py-3 mb-6 text-center font-bold focus:outline-none focus:ring-2 focus:ring-[#d4af37] transition">
+
+            <button onclick="startGame(true)" class="btn-classic w-full font-bold py-4 px-6 rounded-xl mb-5 flex items-center justify-center gap-3 text-lg">
+                <i class="fas fa-robot text-2xl"></i> لاعب ضد الجهاز
+            </button>
+            
+            <button onclick="startGame(false)" class="btn-classic w-full font-bold py-4 px-6 rounded-xl mb-4 flex items-center justify-center gap-3 text-lg">
+                <i class="fas fa-user-friends text-2xl"></i> تحدي صديق
+            </button>
+        </div>
+
+        <div class="mt-10 px-6 py-2">
+            <p class="signature">من اعداد قيس جازي</p>
+        </div>
+    </div>
+
+    <!-- شاشة اللعب -->
+    <div id="game-screen" class="w-full h-full hidden-screen flex-col relative max-w-lg mx-auto py-2">
+        
+        <!-- الشريط العلوي -->
+        <div class="flex justify-between items-center px-4 py-2 flex-shrink-0">
+            <button onclick="returnToMenu()" class="panel-wood w-10 h-10 rounded-full flex items-center justify-center text-[#d4af37] border border-[#d4af37]">
+                <i class="fas fa-arrow-right"></i>
+            </button>
+            <div class="panel-wood px-5 py-1.5 rounded-full font-bold text-white text-sm border border-[#d4af37]">
+                الرميات: <span id="roll-count" class="text-[#d4af37] ml-1">0</span>
+            </div>
+            <button onclick="toggleSound()" class="panel-wood w-10 h-10 rounded-full flex items-center justify-center text-[#d4af37] border border-[#d4af37]">
+                <i id="sound-icon" class="fas fa-volume-up"></i>
+            </button>
+        </div>
+
+        <!-- مؤشر الدور -->
+        <div class="flex justify-center my-1 flex-shrink-0">
+            <div id="turn-indicator" class="panel-wood flex items-center gap-3 px-6 py-2 rounded-full border-2 transition-all duration-300">
+                <div id="turn-color-dot" class="w-4 h-4 rounded-full border-2 border-white"></div>
+                <span id="turn-text" class="font-bold text-lg text-white">دور اللاعب 1</span>
+            </div>
+        </div>
+
+        <!-- الرقعة 2D -->
+        <div class="px-3 flex-shrink-0 my-3">
+            <div id="board-wrapper">
+                <div id="board-container">
+                    <div id="grid"></div>
+                    <canvas id="canvas-layer"></canvas>
+                    <div id="players-layer"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- منطقة النرد -->
+        <div class="flex-grow flex items-center justify-center mt-1 flex-shrink-0">
+            <div class="dice-scene" onclick="handleHumanClick()">
+                <div class="cube" id="dice-cube">
+                    <div class="cube__face cube__face--front"></div>
+                    <div class="cube__face cube__face--back"></div>
+                    <div class="cube__face cube__face--right"></div>
+                    <div class="cube__face cube__face--left"></div>
+                    <div class="cube__face cube__face--top"></div>
+                    <div class="cube__face cube__face--bottom"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- سجل الحركات -->
+        <div class="px-4 pb-1 h-20 flex-shrink-0 mt-3">
+            <div id="history-log" class="panel-wood h-full p-2 overflow-y-auto flex flex-col gap-1 text-sm text-white/80">
+                <!-- الرسائل -->
+            </div>
+        </div>
+        
+        <!-- التوقيع في شاشة اللعب -->
+        <div class="text-center pb-2 pt-1 flex-shrink-0">
+            <span class="signature">من اعداد قيس جازي</span>
+        </div>
+    </div>
+
+    <!-- شاشة الفوز -->
+    <div id="win-screen" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden-screen flex-col items-center justify-center text-center p-6">
+        <i class="fas fa-crown text-[#d4af37] text-8xl mb-6 animate-bounce" style="filter: drop-shadow(0 0 20px #d4af37);"></i>
+        
+        <h2 id="win-text" class="text-5xl font-black text-white mb-8" style="font-family: 'Aref Ruqaa', serif; text-shadow: 0 4px 10px rgba(0,0,0,0.8);">فاز اللاعب!</h2>
+        
+        <button onclick="restartGame()" class="btn-classic font-black text-xl py-4 px-10 rounded-2xl mb-6">
+            <i class="fas fa-redo mr-2"></i> العب مرة أخرى
+        </button>
+        
+        <button onclick="returnToMenu()" class="bg-white/10 border border-white/20 px-6 py-3 rounded-xl text-white font-bold hover:bg-white/20 transition">
+            القائمة الرئيسية
+        </button>
+        
+        <p class="mt-12 signature">من اعداد قيس جازي</p>
+    </div>
+
+    <script>
+        // إعدادات اللعبة
+        const CONSTANTS = {
+            TOTAL_SQUARES: 100,
+            BOARD_SIZE: 10,
+            LADDERS: { 4: 25, 13: 46, 33: 49, 42: 63, 74: 92 },
+            SNAKES: { 36: 12, 48: 26, 62: 18, 88: 53, 95: 75 }
+        };
+
+        let state = {
+            players: [],
+            currentPlayerIndex: 0,
+            isRolling: false,
+            isMoving: false,
+            gameOver: false,
+            totalRolls: 0,
+            soundEnabled: true,
+            isSinglePlayer: true
+        };
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq, duration, type = 'sine', vol = 0.1) {
+            if (!state.soundEnabled || audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start();
+            gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const sounds = {
+            dice: () => { playTone(300, 0.05, 'square', 0.05); setTimeout(() => playTone(400, 0.05, 'square', 0.05), 50); setTimeout(() => playTone(250, 0.1, 'square', 0.05), 100); },
+            move: () => playTone(600, 0.05, 'triangle', 0.1),
+            climb: () => { let f=300; for(let i=0;i<6;i++){ setTimeout(()=>playTone(f,0.1,'triangle',0.1), i*80); f+=100; } },
+            slide: () => { let f=700; for(let i=0;i<6;i++){ setTimeout(()=>playTone(f,0.1,'sawtooth',0.1), i*100); f-=100; } },
+            win: () => { [523, 659, 783, 1046, 1318].forEach((f, i) => setTimeout(() => playTone(f, 0.2, 'sine', 0.15), i * 150)); }
+        };
+
+        const ui = {
+            startScreen: document.getElementById('start-screen'),
+            gameScreen: document.getElementById('game-screen'),
+            winScreen: document.getElementById('win-screen'),
+            grid: document.getElementById('grid'),
+            canvas: document.getElementById('canvas-layer'),
+            playersLayer: document.getElementById('players-layer'),
+            diceCube: document.getElementById('dice-cube'),
+            turnIndicator: document.getElementById('turn-indicator'),
+            turnText: document.getElementById('turn-text'),
+            turnColorDot: document.getElementById('turn-color-dot'),
+        historyLog: document.getElementById('history-log'),
+        rollCount: document.getElementById('roll-count'),
+        soundIcon: document.getElementById('sound-icon'),
+        winText: document.getElementById('win-text'),
+        boardContainer: document.getElementById('board-container'),
+        playerNameInput: document.getElementById('player-name-input')
+    };
+
+    // إعداد أوجه النرد
+        function setupDiceFaces() {
+            const faces = [
+                { class: 'front', value: 1, pos: [[50,50]] },
+                { class: 'back', value: 6, pos: [[25,25],[25,50],[25,75],[75,25],[75,50],[75,75]] },
+                { class: 'right', value: 3, pos: [[25,25],[50,50],[75,75]] },
+                { class: 'left', value: 4, pos: [[25,25],[75,25],[25,75],[75,75]] },
+                { class: 'top', value: 2, pos: [[25,25],[75,75]] },
+                { class: 'bottom', value: 5, pos: [[25,25],[75,25],[50,50],[25,75],[75,75]] }
+            ];
+
+            faces.forEach(face => {
+                const el = ui.diceCube.querySelector(`.cube__face--${face.class}`);
+                el.innerHTML = '';
+                face.pos.forEach(p => {
+                    const dot = document.createElement('div');
+                    dot.className = 'dot-3d';
+                    if(face.value === 1) dot.classList.add('dot-red');
+                    dot.style.left = `calc(${p[0]}% - 6px)`;
+                    dot.style.top = `calc(${p[1]}% - 6px)`;
+                    el.appendChild(dot);
+                });
+            });
+        }
+
+        // بناء المربعات الكلاسيكية
+        function initBoard() {
+            ui.grid.innerHTML = '';
+            for (let i = 0; i < CONSTANTS.TOTAL_SQUARES; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                
+                let row = Math.floor(i / 10);
+                let col = i % 10;
+                let num = (row % 2 === 0) ? (100 - (row * 10) - (9 - col)) : (100 - (row * 10) - col);
+                
+                // تناوب الألوان الكلاسيكية
+                if((row + col) % 2 === 0) cell.classList.add('cell-alt');
+                
+                cell.innerHTML = `<span>${num}</span>`;
+                cell.id = `cell-${num}`;
+                ui.grid.appendChild(cell);
+            }
+            setTimeout(drawExtras, 200);
+        }
+
+        function getSquareCoords(square, offset = 0) {
+            const boardSize = ui.boardContainer.offsetWidth;
+            const cellSize = boardSize / CONSTANTS.BOARD_SIZE;
+            let zeroIndex = square - 1;
+            let row = Math.floor(zeroIndex / CONSTANTS.BOARD_SIZE);
+            let col = zeroIndex % CONSTANTS.BOARD_SIZE;
+            if (row % 2 !== 0) col = (CONSTANTS.BOARD_SIZE - 1) - col;
+            
+            let x = (col * cellSize) + (cellSize / 2) + (offset * 8);
+            let y = boardSize - (row * cellSize) - (cellSize / 2) + (offset * 8);
+            return { x, y, cellSize };
+        }
+
+        // رسم السلالم والثعابين 2D بأسلوب كلاسيكي متقن
+        function drawExtras() {
+            const ctx = ui.canvas.getContext('2d');
+            const size = ui.boardContainer.offsetWidth;
+            const dpr = window.devicePixelRatio || 1;
+            ui.canvas.width = size * dpr;
+            ui.canvas.height = size * dpr;
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, size, size);
+
+            // السلالم (شكل كلاسيكي خشبي)
+            for (const [s, e] of Object.entries(CONSTANTS.LADDERS)) {
+                let p1 = getSquareCoords(parseInt(s));
+                let p2 = getSquareCoords(parseInt(e));
+                let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                let offX = Math.cos(angle + Math.PI/2) * 9;
+                let offY = Math.sin(angle + Math.PI/2) * 9;
+
+                // إضافة ظل لتعزيز العمق
+                ctx.shadowColor = 'rgba(0,0,0,0.4)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetX = 3;
+                ctx.shadowOffsetY = 3;
+
+                ctx.strokeStyle = '#5c4033'; 
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                
+                ctx.beginPath(); ctx.moveTo(p1.x + offX, p1.y + offY); ctx.lineTo(p2.x + offX, p2.y + offY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(p1.x - offX, p1.y - offY); ctx.lineTo(p2.x - offX, p2.y - offY); ctx.stroke();
+
+                ctx.lineWidth = 4;
+                let dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                let steps = Math.floor(dist / 14);
+                for(let i=1; i<steps; i++) {
+                    let rx = p1.x + (p2.x - p1.x) * (i/steps);
+                    let ry = p1.y + (p2.y - p1.y) * (i/steps);
+                    ctx.beginPath(); ctx.moveTo(rx + offX, ry + offY); ctx.lineTo(rx - offX, ry - offY); ctx.stroke();
+                }
+                ctx.shadowColor = 'transparent'; 
+            }
+
+            // الثعابين (ألوان ترابية غامقة)
+            for (const [s, e] of Object.entries(CONSTANTS.SNAKES)) {
+                let p1 = getSquareCoords(parseInt(s)); 
+                let p2 = getSquareCoords(parseInt(e)); 
+                
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 6;
+                ctx.shadowOffsetX = 3;
+                ctx.shadowOffsetY = 3;
+
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                let c1x = (p1.x + p2.x)/2 + 25; let c1y = p1.y + 15;
+                let c2x = (p1.x + p2.x)/2 - 25; let c2y = p2.y - 15;
+                ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
+                
+                ctx.lineWidth = 12; 
+                ctx.strokeStyle = '#271612'; 
+                ctx.stroke();
+                
+                ctx.lineWidth = 8; 
+                ctx.strokeStyle = '#8b5a2b'; 
+                ctx.stroke();
+                
+                ctx.shadowColor = 'transparent';
+
+                // الرأس
+                ctx.beginPath();
+                ctx.arc(p1.x, p1.y, 10, 0, Math.PI*2); 
+                ctx.fillStyle = '#8b5a2b';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#271612';
+                ctx.stroke();
+                
+                // العيون (عيون أفعى كلاسيكية)
+                ctx.fillStyle = '#f9ca24';
+                ctx.beginPath(); ctx.arc(p1.x - 4, p1.y - 3, 3, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(p1.x + 4, p1.y - 3, 3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath(); ctx.arc(p1.x - 4, p1.y - 3, 1.5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(p1.x + 4, p1.y - 3, 1.5, 0, Math.PI*2); ctx.fill();
+                
+                // اللسان
+                ctx.strokeStyle = '#c0392b';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(p1.x, p1.y + 10); ctx.lineTo(p1.x, p1.y + 16); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(p1.x, p1.y + 16); ctx.lineTo(p1.x - 3, p1.y + 20); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(p1.x, p1.y + 16); ctx.lineTo(p1.x + 3, p1.y + 20); ctx.stroke();
+            }
+        }
+
+        function startGame(isSingle) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        state.isSinglePlayer = isSingle;
+
+        // جلب اسم اللاعب من الحقل أو استخدام اسم افتراضي
+        let p1Name = ui.playerNameInput.value.trim();
+        if (p1Name === '') p1Name = 'اللاعب 1';
+
+        // ألوان بيادق كلاسيكية (أزرق وأحمر داكن)
+        state.players = [
+            { id: 1, name: p1Name, pos: 1, color: '#2980b9', isAI: false },
+            { id: 2, name: isSingle ? 'الذكاء الاصطناعي' : 'اللاعب 2', pos: 1, color: '#c0392b', isAI: isSingle }
+        ];
+        state.currentPlayerIndex = 0;
+            state.gameOver = false;
+            state.totalRolls = 0;
+            state.isRolling = false;
+            state.isMoving = false;
+            
+            ui.rollCount.innerText = '0';
+            ui.historyLog.innerHTML = '';
+            ui.playersLayer.innerHTML = '';
+            
+            ui.startScreen.classList.add('hidden-screen');
+            ui.winScreen.classList.add('hidden-screen');
+            ui.gameScreen.classList.remove('hidden-screen');
+
+            setupDiceFaces();
+            // تدوير مبدئي للنرد
+            ui.diceCube.style.transform = `translateZ(-30px) rotateX(15deg) rotateY(15deg)`;
+
+            initBoard();
+            createPlayerPieces();
+            updateTurnUI();
+            logHistory('بدأت اللعبة! حظاً موفقاً.');
+        }
+
+        function createPlayerPieces() {
+        state.players.forEach((p, idx) => {
+            const el = document.createElement('div');
+            el.id = `piece-${p.id}`;
+            el.className = 'player-piece';
+            el.style.backgroundColor = p.color;
+            
+            // إضافة لافتة الاسم فوق القطعة
+            el.innerHTML = `<span class="player-name-label">${p.name}</span>`;
+            
+            ui.playersLayer.appendChild(el);
+            updatePiecePos(p, idx);
+        });
+    }
+
+    function updatePiecePos(player, idx) {
+            const el = document.getElementById(`piece-${player.id}`);
+            if(!el) return;
+            const offset = idx === 0 ? -0.8 : 0.8;
+            const c = getSquareCoords(player.pos, offset);
+            const size = Math.max(18, c.cellSize * 0.55); // حجم متناسب للقطعة
+            el.style.width = `${size}px`;
+            el.style.height = `${size}px`;
+            el.style.left = `${c.x - size/2}px`;
+            el.style.top = `${c.y - size/2}px`;
+        }
+
+        function updateTurnUI() {
+            const p = state.players[state.currentPlayerIndex];
+            ui.turnText.innerText = `دور ${p.name}`;
+            ui.turnColorDot.style.backgroundColor = p.color;
+            ui.turnIndicator.style.borderColor = p.color;
+
+            if (p.isAI && !state.gameOver) {
+                setTimeout(() => {
+                    if(!state.isRolling && !state.isMoving && !state.gameOver) {
+                        executeRoll();
+                    }
+                }, 1000); 
+            }
+        }
+
+        function handleHumanClick() {
+            const p = state.players[state.currentPlayerIndex];
+            if(p.isAI) return; 
+            if(state.isRolling || state.isMoving || state.gameOver) return;
+            executeRoll();
+        }
+
+        async function executeRoll() {
+            state.isRolling = true;
+            sounds.dice();
+            ui.diceCube.classList.add('rolling');
+            
+            state.totalRolls++;
+            ui.rollCount.innerText = state.totalRolls;
+
+            let val = Math.floor(Math.random() * 6) + 1;
+            
+            await sleep(600);
+            ui.diceCube.classList.remove('rolling');
+            
+            const rotations = {
+                1: 'rotateX(0deg) rotateY(0deg)', 
+                2: 'rotateX(-90deg) rotateY(0deg)', 
+                3: 'rotateX(0deg) rotateY(-90deg)', 
+                4: 'rotateX(0deg) rotateY(90deg)', 
+                5: 'rotateX(90deg) rotateY(0deg)', 
+                6: 'rotateX(180deg) rotateY(0deg)'
+            };
+            ui.diceCube.style.transform = `translateZ(-30px) ${rotations[val]}`;
+            
+            const p = state.players[state.currentPlayerIndex];
+            logHistory(`${p.name} رمى النرد: ${val}`);
+            
+            await sleep(400);
+            state.isRolling = false;
+            await movePlayer(p, val);
+        }
+
+        async function movePlayer(player, spaces) {
+            state.isMoving = true;
+            let target = player.pos + spaces;
+
+            if (target > CONSTANTS.TOTAL_SQUARES) {
+                logHistory(`يجب أن يحصل ${player.name} على رقم دقيق`);
+                await sleep(1000);
+                nextTurn();
+                return;
+            }
+
+            const pieceEl = document.getElementById(`piece-${player.id}`);
+            
+            for (let i = 0; i < spaces; i++) {
+                if (player.pos >= CONSTANTS.TOTAL_SQUARES) break;
+                player.pos++;
+                pieceEl.classList.add('piece-jumping');
+                updatePiecePos(player, state.currentPlayerIndex);
+                sounds.move();
+                
+                await sleep(350);
+                pieceEl.classList.remove('piece-jumping');
+            }
+
+            if (player.pos === CONSTANTS.TOTAL_SQUARES) {
+                handleWin(player);
+                return;
+            }
+
+            await checkBoardRules(player);
+        }
+
+        async function checkBoardRules(player) {
+            if (CONSTANTS.LADDERS[player.pos]) {
+                await sleep(300);
+                player.pos = CONSTANTS.LADDERS[player.pos];
+                sounds.climb();
+                updatePiecePos(player, state.currentPlayerIndex);
+                logHistory(`🚀 صعد ${player.name} السلم!`);
+                await sleep(800);
+            } 
+            else if (CONSTANTS.SNAKES[player.pos]) {
+                await sleep(300);
+                player.pos = CONSTANTS.SNAKES[player.pos];
+                sounds.slide();
+                updatePiecePos(player, state.currentPlayerIndex);
+                logHistory(`🐍 ابتلع الثعبان ${player.name}!`);
+                await sleep(800);
+            }
+            nextTurn();
+        }
+
+        function nextTurn() {
+            if (state.gameOver) return;
+            state.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
+            state.isMoving = false;
+            updateTurnUI();
+        }
+
+        function handleWin(player) {
+            state.gameOver = true;
+            state.isMoving = false;
+            sounds.win();
+            logHistory(`🏆 ${player.name} هو البطل!`);
+            
+            setTimeout(() => {
+                ui.winText.innerText = `مبروك ${player.name}!`;
+                ui.gameScreen.classList.add('hidden-screen');
+                ui.winScreen.classList.remove('hidden-screen');
+            }, 1000);
+        }
+
+        function logHistory(msg) {
+            const p = document.createElement('div');
+            p.className = `pb-1 border-b border-[#795548]/50`;
+            p.innerHTML = `<span class="text-[#d4af37] mr-1">•</span> ${msg}`;
+            ui.historyLog.prepend(p);
+        }
+
+        function toggleSound() {
+            state.soundEnabled = !state.soundEnabled;
+            ui.soundIcon.className = state.soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute text-red-500';
+            if(state.soundEnabled && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function restartGame() { startGame(state.isSinglePlayer); }
+        function returnToMenu() {
+            state.gameOver = true;
+            ui.gameScreen.classList.add('hidden-screen');
+            ui.winScreen.classList.add('hidden-screen');
+            ui.startScreen.classList.remove('hidden-screen');
+        }
+
+        const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+        window.addEventListener('resize', () => {
+            if (!ui.gameScreen.classList.contains('hidden-screen')) {
+                drawExtras();
+                state.players.forEach((p, idx) => updatePiecePos(p, idx));
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+
